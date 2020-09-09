@@ -1,0 +1,131 @@
+- hosts: localhost
+  connection: local
+
+  vars:
+
+  tasks:
+      
+    -   name: Check the version of OS
+        command: hostnamectl
+        register: os_check
+        ignore_errors: yes  
+
+    -   name: Absent the Irrelevant files - Ubuntu 20
+        file:
+          path: /etc/apt/sources.list.d/ansible-ubuntu-ansible-focal.list
+          state: absent
+        when:
+          - os_check.stdout | regex_search("Ubuntu 20")
+
+    -   name: Add Erlang Key - Ubuntu
+        apt_key:
+            url: https://packages.erlang-solutions.com/ubuntu/erlang_solutions.asc 
+            state: present
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Add Repo of Erlang - Ubuntu 20
+        apt_repository:
+            repo: deb https://packages.erlang-solutions.com/ubuntu focal contrib
+            state: present
+        when:
+          - os_check.stdout | regex_search("Ubuntu 20")
+
+    -   name: Add Repo of Erlang - Ubuntu 18
+        apt_repository:
+            repo: deb https://packages.erlang-solutions.com/ubuntu bionic contrib
+            state: present
+        when:
+          - os_check.stdout | regex_search("Ubuntu 18")
+
+    -   name: Install Erlang - Ubuntu
+        apt: 
+            name: "{{ item }}" 
+            update_cache: yes 
+            state: present
+        loop: 
+            - erlang
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Add DL Rabbitmq Key - Ubuntu
+        apt_key:
+            url: https://dl.bintray.com/rabbitmq/Keys/rabbitmq-release-signing-key.asc
+            state: present
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Add Main Rabbitmq Key - Ubuntu
+        apt_key:
+            url: https://www.rabbitmq.com/rabbitmq-release-signing-key.asc
+            state: present
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Add Repo of Rabbitmq - Ubuntu
+        apt_repository:
+            repo: deb https://dl.bintray.com/rabbitmq/debian bionic main
+            state: present
+        when:
+          - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Install Rabbitmq - Ubuntu
+        apt: 
+            name: "{{ item }}" 
+            update_cache: yes 
+            state: present
+        loop: 
+            - rabbitmq-server
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+
+    # -   name: Install Dependencies Repo - CentOS 7
+    #     yum:
+    #         name: "{{ item }}"
+    #         state: present
+    #     loop:
+    #         - epel-release
+    #         - *
+    #         - http://packages.erlang-solutions.com/erlang-solutions-1.0-1.noarch.rpm
+    #         - erlang
+    #     when:
+    #         - os_check.stdout | regex_search("CentOS Linux 7")
+
+    # -   name: Add Main Rabbitmq Key - CentOS 
+    #     rpm_key:
+    #         state: present
+    #         key: https://www.rabbitmq.com/rabbitmq-signing-key-public.asc
+    #     when:
+    #         - os_check.stdout | regex_search("CentOS")
+
+    # -   name: Install Rabbitmq - CentOS
+    #     yum:
+    #         name: "{{ item }}"
+    #         state: present
+    #     loop:
+    #         - https://www.rabbitmq.com/releases/rabbitmq-server/v3.6.1/rabbitmq-server-3.6.1-1.noarch.rpm
+    #     when:
+    #         - os_check.stdout | regex_search("CentOS")
+            
+    -   name: Restart Rabbitmq
+        systemd:
+            name: rabbitmq-server
+            state: restarted
+            enabled: yes
+    
+    -   name: Grant Permissions
+        file:
+            path: /var/lib/rabbitmq/
+            recurse: yes
+            owner: rabbitmq
+            group: rabbitmq
+            # mode: '0755'   
+
+    -   name: Initiate Rabbitmq
+        shell: "{{ item }}"
+        loop:
+            - rabbitmq-plugins enable rabbitmq_management
+            - rabbitmqctl add_user mqadmin pwslab_mqadmin
+            - rabbitmqctl set_user_tags mqadmin administrator
+            - rabbitmqctl set_permissions -p / mqadmin ".*" ".*" ".*"
